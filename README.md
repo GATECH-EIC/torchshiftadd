@@ -7,13 +7,13 @@
 </h2>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green)](https://opensource.org/licenses/Apache-2.0)
-[![Contributions](https://img.shields.io/badge/contributions-welcome-blue)](https://github.com/ranery/torchshiftadd/blob/master/CONTRIBUTING.md)
+[![Contributions](https://img.shields.io/badge/contributions-welcome-blue)](https://github.com/GATECH-EIC/torchshiftadd/blob/master/CONTRIBUTING.md)
 
 # TorchShiftAdd Overview
 
 Welcome to TorchShiftAdd, your go-to open-source library for crafting energy-efficient multiplication-less models and applications!
 
-[TorchShiftAdd](https://github.com/ranery/torchshiftadd) embodies a pioneering initiative to simplify and expand the realm of multiplication-less networks within the machine learning community. Key features include:
+[TorchShiftAdd](https://github.com/GATECH-EIC/torchshiftadd) embodies a pioneering initiative to simplify and expand the realm of multiplication-less networks within the machine learning community. Key features include:
 
 * Ready-to-use implementation of a wide range of ShiftAdd-based multiplication-less CNNs or Transformers.
 * CUDA kernels and TVM compilation support for seamless GPU deployment.
