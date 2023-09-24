@@ -2,13 +2,20 @@
     <img src="figs/logo_torchshiftadd.png" alt="torchshiftadd logo" width="600">
 </p>
 
-<h2><p align="center">A PyTorch library for developing energy efficient multiplication-less models and applications.</p><h2>
+<h2>
+    <p align="center">
+    A PyTorch library for developing energy efficient multiplication-less models.
+    </p>
+</h2>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green)](https://opensource.org/licenses/Apache-2.0)
 
+
+# TorchShiftAdd Overview
+
 Welcome to TorchShiftAdd, your go-to open-source library for crafting energy-efficient multiplication-less models and applications!
 
-[TorchShiftAdd]() embodies a pioneering initiative to simplify and expand the realm of multiplication-less networks within the machine learning community. Key features include:
+[TorchShiftAdd](https://github.com/ranery/torchshiftadd) embodies a pioneering initiative to simplify and expand the realm of multiplication-less networks within the machine learning community. Key features include:
 
 * Ready-to-use implementation of a wide range of ShiftAdd-based multiplication-less CNNs or Transformers.
 * CUDA kernels and TVM compilation support for seamless GPU deployment.
