@@ -1,15 +1,13 @@
 <p align="center">
-    <img src="figs/logo_torchshiftadd.png" alt="torchshiftadd logo" width="600">
+    <img src="figs/logo_torchshiftadd.png" alt="torchshiftadd logo" width="500">
 </p>
 
-<h2>
-    <p align="center">
+<h2 align="center">
     A PyTorch library for developing energy efficient multiplication-less models.
-    </p>
 </h2>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green)](https://opensource.org/licenses/Apache-2.0)
-
+[![Contributions](https://img.shields.io/badge/contributions-welcome-blue)](https://github.com/ranery/torchshiftadd/blob/master/CONTRIBUTING.md)
 
 # TorchShiftAdd Overview
 
