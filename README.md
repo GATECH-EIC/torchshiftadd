@@ -20,10 +20,11 @@ Welcome to TorchShiftAdd, your go-to open-source library for crafting energy-eff
 * Ready-to-use implementation of a wide range of ShiftAdd-based multiplication-less CNNs or Transformers.
 * CUDA kernels and TVM compilation support for seamless GPU deployment.
 * Hardware accelerator simulators to estimate energy savings and latency improvements on ASICs or FPGAs.
-* Hardware accelerator simulators to estimate energy savings and latency improvements on ASICs or FPGAs.
+* Flexible support for developing both algorithmic and hardware accelerator designs tailored for multiplication-less networks.
 
-<details><summary>List of Implemented Papers</summary><p>
+<!-- <details><summary>List of Implemented Papers</summary><p> -->
 
+## List of Implemented Papers
 * **ShiftAdd-based Convolutional Neural Networks**
     + [[NeurIPS'20] ShiftAddNet: A Hardware-Inspired Deep Network](https://arxiv.org/abs/2010.12785)
     + [[CVPR'20 Oral] AdderNet: Do We Really Need Multiplications in Deep Learning?](https://arxiv.org/abs/1912.13200)
@@ -39,12 +40,18 @@ Welcome to TorchShiftAdd, your go-to open-source library for crafting energy-eff
     + [[ICCAD'22] NASA: Neural Architecture Search and Acceleration for Hardware Inspired Hybrid Networks](https://arxiv.org/abs/2210.13361)
     + [[IEEE TCAS-I] NASA+: Neural Architecture Search and Acceleration for Multiplication-Reduced Hybrid Networks](https://ieeexplore.ieee.org/document/10078392)
 
-</p></details>
-
 # Installation
+
+Coming soon.
 
 # Qucik Start
 
+Coming soon.
+
 # Contributing
 
+TorchShiftAdd is released under [Apache-2.0 License](LICENSE). Everyone is welcome to contribute to the development of TorchShiftAdd. Please refer to [contributing guidelines](CONTRIBUTING.md) for more details.
+
 # Acknowledgement
+
+Coming soon.
