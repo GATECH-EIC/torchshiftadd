@@ -17,6 +17,7 @@ Welcome to TorchShiftAdd, your go-to open-source library for crafting energy-eff
 
 * Ready-to-use implementation of a wide range of ShiftAdd-based multiplication-less CNNs or Transformers.
 * CUDA kernels and TVM compilation support for seamless GPU deployment.
+* Profiling tools to furnish FLOPs, energy, and latency breakdown data for in-depth analysis and optimization.
 * Hardware accelerator simulators to estimate energy savings and latency improvements on ASICs or FPGAs.
 * Flexible support for developing both algorithmic and hardware accelerator designs tailored for multiplication-less networks.
 
