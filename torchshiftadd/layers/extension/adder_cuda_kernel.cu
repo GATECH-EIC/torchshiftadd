@@ -1,0 +1,646 @@
+#include <ATen/ATen.h>
+#include <ATen/cuda/CUDAContext.h>
+#include <ATen/cuda/ApplyGridUtils.cuh>
+#include <cuda.h>
+#include <cuda_runtime.h>
+
+#include <vector>
+#include <cmath>
+#define MAX_BLOCKS 256
+#define NUM_THREADS 256
+#define MAX(a, b) ((a) > (b)) ? (a) : (b)
+#define MIN(a, b) ((a) < (b)) ? (a) : (b)
+#define HARDTANH(x) ((x) < (-1.0)) ? (-1.0) : (((x) <= (1.0)) ? (x) : (1.0))
+const int WARP_SIZE = 32;
+const int MAX_BLOCK_SIZE = 256;
+
+template <typename T>
+struct SharedMem {
+    __device__ T *getPointer() {
+        __shared__ T smem[MAX_BLOCK_SIZE];
+        return smem;
+    }
+};
+
+static int getGradParamsNumThreads(int batchSize) {
+    return std::min(batchSize * WARP_SIZE, MAX_BLOCK_SIZE);
+}
+
+int get_blocks(int n) {
+    return MIN(MAX_BLOCKS, (n - NUM_THREADS + 1) / NUM_THREADS) + 1;
+}
+
+template <typename scalar_t>
+__global__ void adder_forward_kernel(
+    const scalar_t* __restrict__ input,
+    const scalar_t* __restrict__ weight,
+    scalar_t* __restrict__ output,
+    const int num_elem,
+    const int out_channels,
+    const int in_channels,
+    const int IW, const int IH,
+    const int OW, const int OH,
+    const int KW, const int KH,
+    const int SW, const int SH,
+    const int PW, const int PH,
+    const int GW, const int GH) 
+{
+    // #TODO:
+    if (GW==1)
+    {
+       for (int index = blockDim.x * blockIdx.x + threadIdx.x; index < num_elem; index += gridDim.x * blockDim.x)
+       { 
+            const int n = index / OW / OH / out_channels;
+            const int m = index / OW / OH % out_channels;
+            const int h = index / OW % OH;
+            const int w = index % OW;
+
+            const scalar_t *p_weight = weight + m * in_channels * KH * KW;  //the start position of the kernel(corresponding to the output)
+            // scalar_t value = bias[m];
+            scalar_t value = 0;
+            // #TODO:
+            // #pragma unroll
+            for (int cc = 0; cc < in_channels; cc++)
+            {
+                // #pragma unroll
+                const int image_offset0 = (n * in_channels + cc) * IH * IW;
+                for (int kh = 0; kh < KH; kh++)
+                {
+                    // #pragma unroll
+                    for (int kw = 0; kw < KW; kw++)
+                    {
+                        const int ih = h * SH - PH + kh;
+                        const int iw = w * SW - PW + kw;
+
+                        bool boundary_condition = (ih >= 0) && (ih < IH) && (iw >= 0) && (iw < IW);
+                        if (boundary_condition)
+                        {
+                            // value += input[image_offset0 + ih * IW + iw] * (*p_weight);
+                            value -= abs(input[image_offset0 + ih * IW + iw] - (*p_weight));
+                        }
+                        else // padded area
+                        {
+                            value -= abs(*p_weight);
+                        }
+                        p_weight++;
+                    }
+                }
+            }
+            output[index] = value;
+        } 
+    }
+    if (GW==2)
+    {
+        for (int index = blockDim.x * blockIdx.x + threadIdx.x; index < num_elem; index += gridDim.x * blockDim.x)  
+        // total size of output (batch_size * out_channels * W-out * H_out)
+        {
+            // TODO
+            const int n = index / OW / OH / out_channels;  // batch size of n
+            const int m = index / OW / OH % out_channels;  // relative output channel size
+            const int h = index / OW % OH;  // relative position of H
+            const int w = index % OW;  //relative position of W 
+            
+            const scalar_t *p_weight = weight + m * in_channels/2 * KH * KW;  //the start position of the kernel(corresponding to the output)
+        
+            // scalar_t value = bias[m];
+            scalar_t value = 0;
+            // #TODO:
+            // #pragma unroll
+            if (m < out_channels/2)
+            {
+                for (int cc = 0; cc < in_channels/2; cc++)
+                {
+                    // #pragma unroll
+                    const int image_offset0 = (n * in_channels + cc) * IH * IW;   //channel offset (absolute)
+                    for (int kh = 0; kh < KH; kh++)
+                    {
+                        // #pragma unroll
+                        for (int kw = 0; kw < KW; kw++)
+                        {
+                            const int ih = h * SH - PH + kh;  // *stride-padding of H 
+                            const int iw = w * SW - PW + kw;  // *stride-padding of W 
+
+                            bool boundary_condition = (ih >= 0) && (ih < IH) && (iw >= 0) && (iw < IW);
+                            if (boundary_condition)
+                            {
+                                // value += input[image_offset0 + ih * IW + iw] * (*p_weight);
+                                value -= abs(input[image_offset0 + ih * IW + iw] - (*p_weight));  //pure operation
+                            }
+                            else // padded area
+                            {
+                                value -= abs(*p_weight);
+                            }
+                            p_weight++;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                for (int cc = in_channels/2; cc < in_channels; cc++)
+                {
+                    // #pragma unroll
+                    const int image_offset0 = (n * in_channels + cc) * IH * IW;   //channel offset (absolute)
+                    for (int kh = 0; kh < KH; kh++)
+                    {
+                        // #pragma unroll
+                        for (int kw = 0; kw < KW; kw++)
+                        {
+                            const int ih = h * SH - PH + kh;  // *stride-padding of H 
+                            const int iw = w * SW - PW + kw;  // *stride-padding of W 
+
+                            bool boundary_condition = (ih >= 0) && (ih < IH) && (iw >= 0) && (iw < IW);
+                            if (boundary_condition)
+                            {
+                                // value += input[image_offset0 + ih * IW + iw] * (*p_weight);
+                                value -= abs(input[image_offset0 + ih * IW + iw] - (*p_weight));  //pure operation
+                            }
+                            else // padded area
+                            {
+                                value -= abs(*p_weight);
+                            }
+                            p_weight++;
+                        }
+                    }
+                }
+            }
+            output[index] = value;
+        }
+    }
+    if (GW==in_channels) //Dpws 
+    {
+       for (int index = blockDim.x * blockIdx.x + threadIdx.x; index < num_elem; index += gridDim.x * blockDim.x)
+        {
+            const int n = index / OW / OH / out_channels;
+            const int m = index / OW / OH % out_channels;
+            const int h = index / OW % OH;
+            const int w = index % OW;
+
+            const scalar_t *p_weight = weight + m * 1 * KH * KW;
+            // scalar_t value = bias[m];
+            scalar_t value = 0;
+            // #TODO:
+            // #pragma unroll
+            // #pragma unroll
+            const int image_offset0 = (n * in_channels + m) * IH * IW;
+            for (int kh = 0; kh < KH; kh++)
+            {
+                // #pragma unroll
+                for (int kw = 0; kw < KW; kw++)
+                {
+                    const int ih = h * SH - PH + kh;
+                    const int iw = w * SW - PW + kw;
+
+                    bool boundary_condition = (ih >= 0) && (ih < IH) && (iw >= 0) && (iw < IW);
+                    if (boundary_condition)
+                    {
+                        // value += input[image_offset0 + ih * IW + iw] * (*p_weight);
+                        value -= abs(input[image_offset0 + ih * IW + iw] - (*p_weight));
+                    }
+                    else // padded area
+                    {
+                        value -= abs(*p_weight);
+                    }
+                    p_weight++;
+                }
+            }
+            output[index] = value;
+        }  
+    }
+
+}
+
+template <typename scalar_t>
+__global__ void adder_backward_grad_in_kernel(
+    scalar_t *grad_out,
+    scalar_t *input,
+    scalar_t *weight,
+    scalar_t *grad_in,
+    const int num_elem,
+    const int out_channels,
+    const int in_channels,
+    const int IW, const int IH,
+    const int OW, const int OH,
+    const int KW, const int KH,
+    const int SW, const int SH,
+    const int PW, const int PH,
+    const int GW, const int GH)
+{   if (GW==1)
+    {
+        for (int index = blockIdx.x * blockDim.x + threadIdx.x; index < num_elem; index += gridDim.x * blockDim.x)
+        {
+            const int n = index / IW / IH / in_channels;
+            const int c = index / IW / IH % in_channels;
+            const int h = index / IW % IH;
+            const int w = index % IW;
+
+            scalar_t value = 0;
+            for (int mm = 0; mm < out_channels; mm++)
+            {
+                const int grad_out_offset0 = (n * out_channels + mm) * OH * OW;
+                scalar_t *p_weight = weight + (mm * in_channels + c) * KH * KW;
+                for (int kh = 0; kh < KH; kh++)
+                {
+                    for (int kw = 0; kw < KW; kw++)
+                    {
+                        int oh = h + PH - kh;
+                        int ow = w + PW - kw;
+
+                        if ((oh % SH == 0) && (ow % SW == 0))
+                        {
+                            const bool boundary_condition = (oh >= 0) && (oh < OH) && (ow >= 0) && (ow < OW);
+                            if (boundary_condition)
+                            {
+                                oh = oh / SH;
+                                ow = ow / SW;
+                                // value += grad_out[grad_out_offset0 + oh * OW + ow] * (*p_weight);
+                                scalar_t ht = HARDTANH(*p_weight - input[index]);
+                                value += grad_out[grad_out_offset0 + oh * OW + ow] * ht;
+                            }
+                        }
+                        p_weight++;
+                    }
+                }
+            }
+            grad_in[index] = value;
+        }
+    }
+    if (GW==2)
+    {
+        for (int index = blockIdx.x * blockDim.x + threadIdx.x; index < num_elem; index += gridDim.x * blockDim.x)
+        {
+            const int n = index / IW / IH / in_channels;
+            const int c = index / IW / IH % in_channels;
+            const int h = index / IW % IH;
+            const int w = index % IW;
+
+            scalar_t value = 0;
+            if (c < in_channels/2)
+            {
+                for (int mm = 0; mm < out_channels/2; mm++)
+                {
+                    const int grad_out_offset0 = (n * out_channels + mm) * OH * OW;
+                    scalar_t *p_weight = weight + (mm * in_channels/2 + c) * KH * KW;
+                    for (int kh = 0; kh < KH; kh++)
+                    {
+                        for (int kw = 0; kw < KW; kw++)
+                        {
+                            int oh = h + PH - kh;
+                            int ow = w + PW - kw;
+
+                            if ((oh % SH == 0) && (ow % SW == 0))
+                            {
+                                const bool boundary_condition = (oh >= 0) && (oh < OH) && (ow >= 0) && (ow < OW);
+                                if (boundary_condition)
+                                {
+                                    oh = oh / SH;
+                                    ow = ow / SW;
+                                    // value += grad_out[grad_out_offset0 + oh * OW + ow] * (*p_weight);
+                                    scalar_t ht = HARDTANH(*p_weight - input[index]);
+                                    value += grad_out[grad_out_offset0 + oh * OW + ow] * ht;
+                                }
+                            }
+                            p_weight++;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                for (int mm = out_channels/2; mm < out_channels; mm++)
+                {
+                    const int grad_out_offset0 = (n * out_channels + mm) * OH * OW;
+                    scalar_t *p_weight = weight + (mm * in_channels/2 + c - out_channels/2) * KH * KW;
+                    for (int kh = 0; kh < KH; kh++)
+                    {
+                        for (int kw = 0; kw < KW; kw++)
+                        {
+                            int oh = h + PH - kh;
+                            int ow = w + PW - kw;
+
+                            if ((oh % SH == 0) && (ow % SW == 0))
+                            {
+                                const bool boundary_condition = (oh >= 0) && (oh < OH) && (ow >= 0) && (ow < OW);
+                                if (boundary_condition)
+                                {
+                                    oh = oh / SH;
+                                    ow = ow / SW;
+                                    // value += grad_out[grad_out_offset0 + oh * OW + ow] * (*p_weight);
+                                    scalar_t ht = HARDTANH(*p_weight - input[index]);
+                                    value += grad_out[grad_out_offset0 + oh * OW + ow] * ht;
+                                }
+                            }
+                            p_weight++;
+                        }
+                    }
+                }
+            }
+            grad_in[index] = value;
+        }
+    }
+    if (GW==in_channels)
+    {
+        for (int index = blockIdx.x * blockDim.x + threadIdx.x; index < num_elem; index += gridDim.x * blockDim.x)
+        {
+            const int n = index / IW / IH / in_channels;
+            const int c = index / IW / IH % in_channels;
+            const int h = index / IW % IH;
+            const int w = index % IW;
+
+            scalar_t value = 0;
+            
+            const int grad_out_offset0 = (n * out_channels + c) * OH * OW;
+            scalar_t *p_weight = weight + c * KH * KW;
+            for (int kh = 0; kh < KH; kh++)
+            {
+                for (int kw = 0; kw < KW; kw++)
+                {
+                    int oh = h + PH - kh;
+                    int ow = w + PW - kw;
+
+                    if ((oh % SH == 0) && (ow % SW == 0))
+                    {
+                        const bool boundary_condition = (oh >= 0) && (oh < OH) && (ow >= 0) && (ow < OW);
+                        if (boundary_condition)
+                        {
+                            oh = oh / SH;
+                            ow = ow / SW;
+                            // value += grad_out[grad_out_offset0 + oh * OW + ow] * (*p_weight);
+                            scalar_t ht = HARDTANH(*p_weight - input[index]);
+                            value += grad_out[grad_out_offset0 + oh * OW + ow] * ht;
+                        }
+                    }
+                    p_weight++;
+                }
+            }
+            grad_in[index] = value;
+        }
+    }
+}
+
+template <typename scalar_t>
+__global__ void adder_backward_grad_weight_kernel(
+    scalar_t *grad_out,
+    scalar_t *input,
+    scalar_t *weight,
+    scalar_t *grad_weight,
+    const int batch_size,
+    const int out_channels,
+    const int in_channels,
+    const int IW, const int IH,
+    const int OW, const int OH,
+    const int KW, const int KH,
+    const int SW, const int SH,
+    const int PW, const int PH,
+    const int GW, const int GH)
+{
+    int bidx = blockIdx.x;
+    int kW = bidx % KW;
+    int kH = bidx / KW % KH;
+    int ch = bidx / KW / KH % in_channels;
+    int mh = bidx / KW / KH / in_channels;
+
+    if (GW == 2) {
+        ch = bidx / KW / KH % (in_channels / 2);
+        mh = bidx / KW / KH / (in_channels / 2);
+        if (mh >= out_channels / 2) {
+            ch = ch + in_channels / 2;
+        }
+    }
+    if (GW == in_channels) {
+        ch = bidx / KW / KH;
+        mh = bidx / KW / KH;
+    }
+
+    scalar_t grad = 0;
+    const int laneId = threadIdx.x % WARP_SIZE;
+    const int batch = threadIdx.x / WARP_SIZE;
+    const int nwarps = blockDim.x / WARP_SIZE;
+    const int imageElements = OW * OH;
+
+    for (int batchIdx = batch; batchIdx < batch_size; batchIdx += nwarps) {
+        for (int idx = laneId; idx < imageElements; idx += WARP_SIZE) {
+            int go_w_offset = idx % OW;
+            int go_h_offset = idx / OW;
+
+            int i_w_offset = go_w_offset * SW + kW - PW;
+            int i_h_offset = go_h_offset * SH + kH - PH;
+
+            int outputOffset = ((batchIdx * out_channels + mh) * OH) * OW + idx;
+            if (i_w_offset >= 0 && i_h_offset >= 0 && i_w_offset < IW && i_h_offset < IH) {
+                int inputOffset = ((batchIdx * in_channels + ch) * IH + i_h_offset) * IW + i_w_offset;
+                grad += (input[inputOffset] - weight[bidx]) * grad_out[outputOffset];
+            } else {
+                grad += -weight[bidx] * grad_out[outputOffset];
+            }
+        }
+    }
+
+    __shared__ scalar_t shared[NUM_THREADS];
+    shared[threadIdx.x] = grad;
+    __syncthreads();
+
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (threadIdx.x < stride) {
+            shared[threadIdx.x] += shared[threadIdx.x + stride];
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0) {
+        scalar_t tval = shared[0];
+        if (GW == 1) {
+            int weightOffset = kW + (KW * kH) + (KW * KH * ch) + (KW * KH * in_channels * mh);
+            grad_weight[weightOffset] = tval;
+        }
+        if (GW == 2) {
+            if (mh < out_channels / 2) {
+                int weightOffset = kW + (KW * kH) + (KW * KH * ch) + (KW * KH * (in_channels / 2) * mh);
+                grad_weight[weightOffset] = tval;
+            } else {
+                int weightOffset = kW + (KW * kH) + (KW * KH * (ch - in_channels / 2)) + (KW * KH * (in_channels / 2) * mh);
+                grad_weight[weightOffset] = tval;
+            }
+        }
+        if (GW == in_channels) {
+            int weightOffset = kW + (KW * kH) + (KW * KH * 0) + (KW * KH * 1 * mh);
+            grad_weight[weightOffset] = tval;
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////
+////////////////////////////END OF KERNEL///////////////////////////////
+////////////////////////////////////////////////////////////////////////
+
+int adder_cuda_forward(
+    const at::Tensor &input,
+    const at::Tensor &weight,
+    // const at::Tensor &bias,
+    at::Tensor &output,
+    int KW, int KH,
+    int SW, int SH,
+    int PW, int PH,
+    int GW, int GH
+    )
+{
+    const int batch_size = output.size(0);
+    const int in_channels = input.size(1);
+    const int out_channels = output.size(1);
+    const int IW = input.size(3);
+    const int IH = input.size(2);
+    const int OW = output.size(3);
+    const int OH = output.size(2);
+    const int num_elem = batch_size * out_channels * OH * OW;
+    const int num_blocks = get_blocks(num_elem);
+
+    AT_DISPATCH_FLOATING_TYPES(output.scalar_type(), "adder_cuda_forward", ([&] {
+                                   adder_forward_kernel<scalar_t><<<num_blocks, NUM_THREADS>>>(
+                                       input.data_ptr<scalar_t>(),
+                                       weight.data_ptr<scalar_t>(),
+                                       output.data_ptr<scalar_t>(),
+                                       num_elem,
+                                       out_channels,
+                                       in_channels,
+                                       IW, IH,
+                                       OW, OH,
+                                       KW, KH,
+                                       SW, SH,
+                                       PW, PH,
+                                       GW, GH
+                                       );
+                               }));
+    // AT_CUDA_CHECK(cudaGetLastError());
+    C10_CUDA_CHECK(cudaGetLastError());
+    return 1;
+}
+
+/*
+scalar_t *grad_out,
+scalar_t *weight,
+scalar_t *grad_in,
+const int num_elem,
+const int out_channels,
+const int in_channels,
+const int IW, const int IH,
+const int OW, const int OH,
+const int KW, const int KH,
+const int SW, const int SH,
+const int PW, const int PH,
+const int GW, const int GH
+*/
+
+int adder_cuda_backward_grad_in(
+    at::Tensor &grad_out,
+    at::Tensor &input,
+    at::Tensor &weight,
+    at::Tensor &grad_in,
+    int KW, int KH,
+    int SW, int SH,
+    int PW, int PH,
+    int GW, int GH
+    )
+{
+    const int batch_size = grad_in.size(0);
+    const int in_channels = grad_in.size(1);
+    const int out_channels = grad_out.size(1);
+    const int IW = grad_in.size(3);
+    const int IH = grad_in.size(2);
+    const int OW = grad_out.size(3);
+    const int OH = grad_out.size(2);
+    const int num_elem = batch_size * in_channels * IH * IW;
+    const int num_blocks = get_blocks(num_elem);
+
+    AT_DISPATCH_FLOATING_TYPES(grad_in.type(), "adder_cuda_backward_grad_in", ([&] {
+                                   adder_backward_grad_in_kernel<scalar_t><<<num_blocks, NUM_THREADS>>>(
+                                       grad_out.data_ptr<scalar_t>(),
+                                       input.data_ptr<scalar_t>(),
+                                       weight.data_ptr<scalar_t>(),
+                                       grad_in.data_ptr<scalar_t>(),
+                                       num_elem,
+                                       out_channels,
+                                       in_channels,
+                                       IW, IH,
+                                       OW, OH,
+                                       KW, KH,
+                                       SW, SH,
+                                       PW, PH,
+                                       GW, GH
+                                      );
+                               }));
+    // AT_CUDA_CHECK(cudaGetLastError());
+    C10_CUDA_CHECK(cudaGetLastError());
+    return 1;
+}
+
+int adder_cuda_backward_grad_weight(
+    at::Tensor &grad_out,
+    at::Tensor &input,
+    at::Tensor &weight,
+    at::Tensor &grad_weight,
+    int KW, int KH,
+    int SW, int SH,
+    int PW, int PH,
+    int GW, int GH
+    )
+{
+    const int batch_size = input.size(0);
+    const int in_channels = input.size(1);
+    const int out_channels = grad_out.size(1);
+    const int IW = input.size(3);
+    const int IH = input.size(2);
+    const int OW = grad_out.size(3);
+    const int OH = grad_out.size(2);
+
+    int blocks = out_channels * in_channels * KH * KW;
+
+    if (GW==2)
+    {
+        blocks = out_channels * (in_channels/2) * KH * KW;
+    }
+    if (GW==in_channels)
+    {
+        blocks = out_channels * 1 * KH * KW;
+    }
+
+    // Make sure we have enough threads to perform the reduction, and use this number
+    // to create the shared memory size for the reduction
+    dim3 grid(blocks);
+    dim3 block(getGradParamsNumThreads(batch_size));
+    // int smem = block.x * sizeof(accreal);
+
+    AT_DISPATCH_FLOATING_TYPES(grad_weight.type(), "adder_cuda_backward_grad_weight", ([&] {
+                                   adder_backward_grad_weight_kernel<scalar_t><<<grid, block, block.x * sizeof(scalar_t)>>>(
+                                       grad_out.data_ptr<scalar_t>(),
+                                       input.data_ptr<scalar_t>(),
+                                       weight.data_ptr<scalar_t>(),
+                                       grad_weight.data_ptr<scalar_t>(),
+                                       batch_size,
+                                       out_channels,
+                                       in_channels,
+                                       IW, IH,
+                                       OW, OH,
+                                       KW, KH,
+                                       SW, SH,
+                                       PW, PH,
+                                       GW, GH);
+                               }));
+    // AT_CUDA_CHECK(cudaGetLastError());
+    C10_CUDA_CHECK(cudaGetLastError());
+    return 1;
+}
+
+/*
+scalar_t *grad_out,
+scalar_t *input,
+scalar_t *grad_weight,
+const int batch_size,
+const int out_channels,
+const int in_channels,
+const int IW, const int IH,
+const int OW, const int OH,
+const int KW, const int KH,
+const int SW, const int SH,
+const int PW, const int PH,
+const int GW, const int GH
+*/
