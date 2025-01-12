@@ -3,7 +3,22 @@ import torch
 
 from torchshiftadd import layers
 
-class Adder2DTest(unittest.TestCase):
+class LinearShiftTest(unittest.TestCase):
+
+    def setup(self):
+        self.input = torch.rand(32, 32)
+
+    def test_adder2d(self):
+        self.setup()
+        shift = layers.LinearShift(
+            in_features=32,
+            out_features=64,
+            bias=True,
+        )
+        output = shift(self.input)
+        self.assertEqual(output.shape, (32, 64))
+
+class Conv2dShiftTest(unittest.TestCase):
 
     def setup(self):
         self.input = torch.rand(1, 3, 32, 32)
@@ -12,21 +27,21 @@ class Adder2DTest(unittest.TestCase):
         self.stride = 1
         self.padding = 1
         self.groups = 1
-        self.eta = 1.0
 
     def test_adder2d(self):
         self.setup()
-        adder = layers.Adder2D(
-            input_channel=3,
-            output_channel=64,
+        shift = layers.Conv2dShift(
+            in_channels=3,
+            out_channels=64,
             kernel_size=3,
             stride=self.stride,
             padding=self.padding,
             groups=self.groups,
             bias=True,
-            eta=self.eta,
+            weight_bits=4,
+            input_bits=16,
         )
-        output = adder(self.input)
+        output = shift(self.input)
         self.assertEqual(output.shape, (1, 64, 32, 32))
 
 if __name__ == "__main__":
