@@ -28,24 +28,36 @@ Welcome to TorchShiftAdd, your go-to open-source library for crafting energy-eff
     + [[NeurIPS'20] ShiftAddNet: A Hardware-Inspired Deep Network](https://arxiv.org/abs/2010.12785)
     + [[CVPR'20 Oral] AdderNet: Do We Really Need Multiplications in Deep Learning?](https://arxiv.org/abs/1912.13200)
     + [[CVPR'21 Workshop] DeepShift: Towards Multiplication-Less Neural Networks](https://arxiv.org/abs/1905.13298)
-    + [[ICLR'23] Bit-Pruning: A Sparse Multiplication-Less Dot-Product](https://openreview.net/pdf?id=YUDiZcZTI8)
 * **ShiftAdd-based Transformers**
     + [[NeurIPS'23] ShiftAddViT: Mixture of Multiplication Primitives Towards Efficient Vision Transformer](https://arxiv.org/abs/2306.06446)
-    + [[NeurIPS'22] EcoFormer: Energy-Saving Attention with Linear Complexity](https://arxiv.org/abs/2209.09004)
-* **Linear Attention in Transformers**
-    + [[CVPR'23] Castling-ViT: Compressing Self-Attention via Switching Towards Linear-Angular Attention During Vision Transformer Inference](https://arxiv.org/abs/2211.10526)
-    + [[HPCA'23] ViTALiTy: Unifying Low-rank and Sparse Approximation for Vision Transformer Acceleration with a Linear Taylor Attention](https://arxiv.org/abs/2211.05109)
+    + [[NeurIPS'24] ShiftAddLLM: Accelerating Pretrained LLMs via Post-Training Multiplication-Less Reparameterization](https://arxiv.org/abs/2406.05981)
 * **Hardware Accelerators for ShiftAdd-based Multiplication-less Networks**
     + [[ICCAD'22] NASA: Neural Architecture Search and Acceleration for Hardware Inspired Hybrid Networks](https://arxiv.org/abs/2210.13361)
     + [[IEEE TCAS-I] NASA+: Neural Architecture Search and Acceleration for Multiplication-Reduced Hybrid Networks](https://ieeexplore.ieee.org/document/10078392)
 
 # Installation
 
-Coming soon.
+````bash
+python setup.py install -e .
+````
 
 # Qucik Start
 
-Coming soon.
+Currently codebase well supports ShiftAdd-based Convolutional Neural Networks. To use them, check our test files:
+
+````bash
+python test/models/test_resnet20_adder.py
+python test/models/test_resnet20_shift.py
+python test/models/test_resnet20_shiftadd.py
+````
+
+# Upcoming Features
+
+We will continously develop this toolbox, and aims to
+
+- [x] ShiftAdd-based Convolutional Neural Networks
+- [ ] ShiftAdd-based Transformers
+- [ ] Hardware Accelerators for Energy & Latency Estimation
 
 # Contributing
 
@@ -53,4 +65,4 @@ TorchShiftAdd is released under [Apache-2.0 License](LICENSE). Everyone is welco
 
 # Acknowledgement
 
-Coming soon.
+All co-authors of ShiftAddNet, ShiftAddNAS, ShiftAddViT, and ShiftAddLLM.

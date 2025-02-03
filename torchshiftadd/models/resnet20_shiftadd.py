@@ -1,19 +1,29 @@
-from torchshiftadd.layers import adder
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchshiftadd.layers import adder, shift
 
-__all__ = ['resnet20_adder']
+__all__ = ['resnet20_shiftadd']
 
 
 def conv3x3(in_planes, out_planes, stride=1):
-    return adder.Adder2D(
+    shift_layer = shift.Conv2dShift(
         in_planes, 
         out_planes, 
         kernel_size=3, 
         stride=stride, 
         padding=1, 
+        bias=False
+    )
+    add_layer = adder.Adder2D(
+        out_planes, 
+        out_planes, 
+        kernel_size=3, 
+        stride=1, 
+        padding=1, 
         bias=False,
     )
+    return nn.Sequential(shift_layer, add_layer)
 
 
 class BasicBlock(nn.Module):
@@ -53,19 +63,18 @@ class ResNet(nn.Module):
     def __init__(self, block, layers, num_classes=10):
         super(ResNet, self).__init__()
         self.inplanes = 16
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
+        self.conv1 = shift.Conv2dShift(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(16)
         self.relu = nn.ReLU(inplace=True)
         self.layer1 = self._make_layer(block, 16, layers[0])
         self.layer2 = self._make_layer(block, 32, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 64, layers[2], stride=2)
         self.avgpool = nn.AvgPool2d(8, stride=1)
-        # use conv as fc layer (addernet)
-        self.fc = nn.Conv2d(64 * block.expansion, num_classes, 1, bias=False)
+        self.fc = shift.Conv2dShift(64 * block.expansion, num_classes, 1, bias=False)
         self.bn2 = nn.BatchNorm2d(num_classes)
 
 
-        # init (for adder)
+        # init
         for m in self.modules():
             if isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
@@ -75,11 +84,18 @@ class ResNet(nn.Module):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                adder.Adder2D(
+                shift.Conv2dShift(
                     self.inplanes, 
                     planes * block.expansion, 
                     kernel_size=1, 
                     stride=stride, 
+                    bias=False,
+                ),
+                adder.Adder2D(
+                    planes * block.expansion, 
+                    planes * block.expansion, 
+                    kernel_size=1, 
+                    stride=1, 
                     bias=False,
                 ),
                 nn.BatchNorm2d(planes * block.expansion)
@@ -120,7 +136,7 @@ class ResNet(nn.Module):
 
         return x.view(x.size(0), -1)
 
-def resnet20_adder(num_classes=10, **kwargs):
+def resnet20_shiftadd(num_classes=10, **kwargs):
     return ResNet(
         BasicBlock, 
         [3, 3, 3], 

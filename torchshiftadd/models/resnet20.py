@@ -1,12 +1,12 @@
-from torchshiftadd.layers import adder
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ['resnet20_adder']
+__all__ = ['resnet20']
 
 
 def conv3x3(in_planes, out_planes, stride=1):
-    return adder.Adder2D(
+    return nn.Conv2d(
         in_planes, 
         out_planes, 
         kernel_size=3, 
@@ -60,12 +60,11 @@ class ResNet(nn.Module):
         self.layer2 = self._make_layer(block, 32, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 64, layers[2], stride=2)
         self.avgpool = nn.AvgPool2d(8, stride=1)
-        # use conv as fc layer (addernet)
         self.fc = nn.Conv2d(64 * block.expansion, num_classes, 1, bias=False)
         self.bn2 = nn.BatchNorm2d(num_classes)
 
 
-        # init (for adder)
+        # init
         for m in self.modules():
             if isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
@@ -75,7 +74,7 @@ class ResNet(nn.Module):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                adder.Adder2D(
+                nn.Conv2d(
                     self.inplanes, 
                     planes * block.expansion, 
                     kernel_size=1, 
@@ -120,7 +119,7 @@ class ResNet(nn.Module):
 
         return x.view(x.size(0), -1)
 
-def resnet20_adder(num_classes=10, **kwargs):
+def resnet20(num_classes=10, **kwargs):
     return ResNet(
         BasicBlock, 
         [3, 3, 3], 
