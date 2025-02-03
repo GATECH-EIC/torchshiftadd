@@ -50,6 +50,7 @@ class ResNetAdderAccTest(unittest.TestCase):
 
         print("Top-1 Acc: {:.2f}%".format(top_1))
         print("Top-5 Acc: {:.2f}%".format(top_5))
+        
 
 if __name__ == "__main__":
     unittest.main()
