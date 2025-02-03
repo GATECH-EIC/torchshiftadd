@@ -43,7 +43,7 @@ python setup.py install -e .
 
 # Qucik Start
 
-Currently codebase well supports ShiftAdd-based Convolutional Neural Networks. To use them, check our test files:
+Currently codebase supports ShiftAdd-based CNNs. To use them, check our test files:
 
 ````bash
 python test/models/test_resnet20_adder.py
@@ -53,7 +53,7 @@ python test/models/test_resnet20_shiftadd.py
 
 # Upcoming Features
 
-We will continously develop this toolbox, and aims to
+We will continously develop this toolbox:
 
 - [x] ShiftAdd-based Convolutional Neural Networks
 - [ ] ShiftAdd-based Transformers
